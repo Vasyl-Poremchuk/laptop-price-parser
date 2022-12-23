@@ -1,7 +1,6 @@
 import csv
 import os.path
 from dataclasses import dataclass, fields, astuple
-from pprint import pprint
 from urllib.parse import urljoin
 
 import requests
@@ -14,6 +13,18 @@ LAPTOP_URL = urljoin(
     BASE_URL, "ua/computer/noutbuki-netbuki/33373/",
 )
 OUTPUT_CSV_PATH = "laptops.csv"
+LAPTOPS = [
+    "ASUS ROG Strix G15 G513IM (G513IM-HN008)",
+    "ASUS TUF Gaming F15 FX506HM (FX506HM-HN017)",
+    "MSI Titan GT77 (TITANGT7712064)",
+    "HP Victus 16-e0262nw (4P4Z6EA)",
+    "Lenovo Legion 5 Pro 16ACH6H (82JQ00E8PB)",
+    "ASUS TUF Gaming F17 FX707ZM Jaeger Gray (FX707ZM-HX017)",
+    "Acer Nitro 5 AN515-57-55ZS (NH.QEWEP.004)",
+    "ASUS ROG Strix G17 G713QM (G713QM-RS76)",
+    "ASUS ROG Zephyrus S17 GX701LWS (GX701LWS-XS76)",
+    "ASUS ROG Strix G15 G512LV (G512LV-ES74)",
+]
 
 
 @dataclass
@@ -44,26 +55,24 @@ def parse_single_laptop(laptop_soup: Tag) -> Laptop:
 
     avr_price = laptop_soup.select_one(".price__value")
     if avr_price:
-        avr_price = int(
-            "".join(symbol for symbol in avr_price.text if symbol.isdigit())
-        )
+        avr_price = int(avr_price.text.replace("\xa0", ""))
 
-    min_price = 0
-    max_price = 0
+    min_price = None
+    max_price = None
 
     if range_price and len(range_price) == 2:
         min_price = int(
-            "".join(symbol for symbol in range_price[0] if symbol.isdigit())
+            range_price[0].replace("\xa0", "").replace(" грн", "")
         )
         max_price = int(
-            "".join(symbol for symbol in range_price[1] if symbol.isdigit())
+            range_price[1].replace("\xa0", "").replace(" грн", "")
         )
 
     return Laptop(
         model=model,
         description=description,
         min_price=min_price,
-        avr_price=0 if not avr_price else avr_price,
+        avr_price=None if not avr_price else avr_price,
         max_price=max_price,
     )
 
@@ -86,7 +95,11 @@ def get_single_page_laptops(page_soup: Tag) -> [Laptop]:
     """
     laptops = page_soup.select(".list-item--row")
 
-    return [parse_single_laptop(laptop_soup) for laptop_soup in laptops]
+    return [
+        parse_single_laptop(laptop_soup)
+        for laptop_soup in laptops
+        if laptop_soup.select_one(".text-md").text.strip() in LAPTOPS
+    ]
 
 
 def get_laptops() -> [Laptop]:
@@ -150,15 +163,16 @@ def update_laptop_csv_file(laptops: [Laptop]) -> None:
             ]
         )
 
-    for cur_data in current_data:
-        for ex_data in existing_data[1:]:
-            if cur_data[0] == ex_data[0]:
-                if cur_data[3] != ex_data[3]:
-                    pprint(
-                        f"UPDATED DATA: model - {cur_data[0]} "
-                        f"average price - {cur_data[3]}"
-                    )
-                break
+    for cur_data, ex_data in zip(current_data, existing_data[1:]):
+        if cur_data[0] == ex_data[0]:
+            print(f"Model: {cur_data[0]}")
+            if cur_data[2] != ex_data[2]:
+                print(f"Updated minimum price: {cur_data[2]}")
+            if cur_data[3] != ex_data[3]:
+                print(f"Updated average price: {cur_data[3]}")
+            if cur_data[4] != ex_data[4]:
+                print(f"Updated maximum price: {cur_data[4]}")
+        print("\n")
 
     write_laptops_to_csv(laptops)
 
